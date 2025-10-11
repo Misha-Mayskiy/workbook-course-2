@@ -55,52 +55,66 @@ class App(tk.Tk):
     def _create_left_panel(self, parent):
         frame = ttk.Frame(parent, padding=10)
         frame.columnconfigure(0, weight=1)
+
         settings_frame = ttk.LabelFrame(frame, text="1. Настройки", padding=10)
         settings_frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         settings_frame.columnconfigure(1, weight=1)
+
         ttk.Label(settings_frame, text="Размерность:").grid(row=0, column=0, sticky="w")
         self.dimension_spinbox = ttk.Spinbox(settings_frame, from_=2, to=15, width=5, command=self.generate_matrix_grid)
         self.dimension_spinbox.set("7")
         self.dimension_spinbox.grid(row=0, column=1, sticky="w", padx=5)
+
         self.is_weighted_var = tk.BooleanVar(value=True)
         weighted_check = ttk.Checkbutton(settings_frame, text="Учитывать длины дорог (веса)",
                                          variable=self.is_weighted_var, command=self.on_mode_change)
         weighted_check.grid(row=1, column=0, columnspan=2, sticky="w", pady=(5, 0))
+
         self.matrix_lf = ttk.LabelFrame(frame, text="2. Таблица длин", padding=10)
         self.matrix_lf.grid(row=1, column=0, sticky="ew", pady=5)
         self.matrix_frame = ttk.Frame(self.matrix_lf)
         self.matrix_frame.pack(fill="both", expand=True)
+
         graph_frame = ttk.LabelFrame(frame, text="3. Описание графа", padding=10)
         graph_frame.grid(row=2, column=0, sticky="nsew", pady=5)
         frame.rowconfigure(2, weight=1)
+
         graph_frame.columnconfigure(0, weight=1)
         graph_frame.rowconfigure(1, weight=1)
+
         self.graph_label = ttk.Label(graph_frame, text="Рёбра графа (напр. A-B 15):", font=self.label_font)
         self.graph_label.grid(row=0, column=0, sticky="w")
+
         self.edges_text = tk.Text(graph_frame, height=8, relief=tk.SOLID, borderwidth=1, font=("Consolas", 10))
         self.edges_text.grid(row=1, column=0, sticky="nsew", pady=5)
+
         target_frame = ttk.LabelFrame(frame, text="4. Искомые вершины", padding=10)
         target_frame.grid(row=3, column=0, sticky="ew", pady=5)
         self.targets_entry = ttk.Entry(target_frame)
         self.targets_entry.pack(fill=tk.X, expand=True)
+
         return frame
 
     def _create_right_panel(self, parent):
         frame = ttk.Frame(parent, padding=10)
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(1, weight=1)
+
         vis_header_frame = ttk.Frame(frame)
         vis_header_frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         ttk.Label(vis_header_frame, text="Визуализация графа", font=self.header_font,
                   foreground=self.colors['header']).pack(side="left")
         ttk.Button(vis_header_frame, text="Обновить граф", command=self.draw_graph).pack(side="right")
+
         self.canvas = tk.Canvas(frame, bg="white", relief=tk.SOLID, borderwidth=1, highlightthickness=0)
         self.canvas.grid(row=1, column=0, sticky="nsew")
         self.canvas.bind("<Configure>", lambda e: self.draw_graph())
+
         solve_button = ttk.Button(frame, text="НАЙТИ ОТВЕТ", style="Accent.TButton", command=self.solve_problem)
         self.style.configure("Accent.TButton", font=self.header_font, padding=10, background=self.colors['button'],
                              foreground=self.colors['button_fg'])
         solve_button.grid(row=2, column=0, sticky="ew", pady=(10, 5))
+
         self.result_label = ttk.Label(frame, text="...", font=self.result_font, padding=10, background="lightgrey",
                                       relief=tk.RIDGE, anchor="center")
         self.result_label.grid(row=3, column=0, sticky="ew")
@@ -120,6 +134,7 @@ class App(tk.Tk):
             self.graph_label.config(text="Рёбра графа (напр. A-B):")
             self.edges_text.insert("1.0", "А-Б\nБ-В\nБ-Г\nВ-Г\nГ-Д\nД-Е")
             self.targets_entry.insert(0, "А, Е")
+
         self.generate_matrix_grid()
         self.draw_graph()
 
@@ -129,15 +144,20 @@ class App(tk.Tk):
         except ValueError:
             return
         self.dimension = new_dim
-        for widget in self.matrix_frame.winfo_children(): widget.destroy()
+
+        for widget in self.matrix_frame.winfo_children():
+            widget.destroy()
+
         self.matrix_widgets = [[None] * self.dimension for _ in range(self.dimension)]
         is_weighted = self.is_weighted_var.get()
         vcmd = (self.register(lambda P: P.isdigit() or P == ""), '%P')
+
         for i in range(self.dimension + 1):
             self.matrix_frame.grid_columnconfigure(i, weight=1, minsize=35)
             self.matrix_frame.grid_rowconfigure(i, weight=1)
             for j in range(self.dimension + 1):
-                if i == 0 and j == 0: continue
+                if i == 0 and j == 0:
+                    continue
                 header_style = {'font': self.label_font, 'anchor': 'center'}
                 if i == 0:
                     ttk.Label(self.matrix_frame, text=f"П{j}", **header_style).grid(row=i, column=j, sticky="nsew")
@@ -153,13 +173,15 @@ class App(tk.Tk):
                                           width=4)
                         entry.grid(row=i, column=j, sticky="nsew", padx=1, pady=1)
                         entry.bind("<KeyRelease>", lambda e, ro=r, co=c: self.sync_entries(ro, co))
-                        if c < r: entry.config(state=tk.DISABLED)
+                        if c < r:
+                            entry.config(state=tk.DISABLED)
                         self.matrix_widgets[r][c] = entry
                     else:
                         var = tk.BooleanVar()
                         cb = ttk.Checkbutton(self.matrix_frame, variable=var,
                                              command=lambda ro=r, co=c: self.sync_checkboxes(ro, co))
-                        if c < r: cb.config(state=tk.DISABLED)
+                        if c < r:
+                            cb.config(state=tk.DISABLED)
                         cb.grid(row=i, column=j, sticky="nsew")
                         self.matrix_widgets[r][c] = var
 
@@ -177,53 +199,105 @@ class App(tk.Tk):
         self.matrix_widgets[c][r].set(val)
 
     def _parse_graph_for_drawing(self):
-        adj, nodes, weights = collections.defaultdict(list), set(), {}
+        """
+        Устойчивый парсинг для визуализации (совпадает по духу с backend):
+        - поддерживает -, –, —;
+        - изолированные вершины;
+        - вес берётся как последнее число в строке (если есть).
+        """
+        adj = collections.defaultdict(list)
+        nodes = set()
+        weights = {}
         is_weighted = self.is_weighted_var.get()
         text = self.edges_text.get("1.0", tk.END)
-        for line in text.strip().split('\n'):
-            parts = [p for p in re.split(r'[\s,-]+', line.strip().upper()) if p]
-            if len(parts) >= 2:
-                u, v = parts[0], parts[1]
-                adj[u].append(v);
-                adj[v].append(u)
-                nodes.add(u);
-                nodes.add(v)
-                if is_weighted and len(parts) > 2 and parts[2].isdigit():
-                    weights[tuple(sorted((u, v)))] = parts[2]
+
+        edge_seen = set()
+
+        for raw_line in text.strip().split('\n'):
+            line = raw_line.strip().upper()
+            if not line:
+                continue
+            line = line.replace('—', '-').replace('–', '-').replace('−', '-')
+            line = re.sub(r'[;,]', ' ', line)
+            parts = [p for p in re.split(r'\s+|-', line) if p]
+
+            if len(parts) == 1:
+                u = parts[0]
+                nodes.add(u)
+                adj.setdefault(u, [])
+                continue
+
+            if is_weighted:
+                if len(parts) >= 3 and parts[-1].isdigit():
+                    u, v, w = parts[0], parts[1], parts[-1]
+                    key = tuple(sorted((u, v)))
+                    if key in edge_seen:
+                        # дубликат игнорируем визуально
+                        continue
+                    edge_seen.add(key)
+                    adj[u].append(v)
+                    adj[v].append(u)
+                    nodes.update([u, v])
+                    weights[key] = w
+                else:
+                    # пропускаем кривые строки
+                    continue
+            else:
+                if len(parts) >= 2:
+                    u, v = parts[0], parts[1]
+                    key = tuple(sorted((u, v)))
+                    if key in edge_seen:
+                        continue
+                    edge_seen.add(key)
+                    adj[u].append(v)
+                    adj[v].append(u)
+                    nodes.update([u, v])
+                else:
+                    continue
+
+        for u in nodes:
+            adj.setdefault(u, [])
+
         return adj, sorted(list(nodes)), weights
 
     def _calculate_force_directed_layout(self, adj, nodes, width, height):
-        if not nodes: return {}
+        if not nodes:
+            return {}
         pos = {node: (random.uniform(20, width - 20), random.uniform(20, height - 20)) for node in nodes}
         area = width * height
         k = 0.9 * math.sqrt(area / len(nodes))
         iterations = 80
         temp = width / 10.0
-        for i in range(iterations):
+        for _ in range(iterations):
             disp = {node: [0.0, 0.0] for node in nodes}
             for u in nodes:
                 for v in nodes:
-                    if u == v: continue
+                    if u == v:
+                        continue
                     dx, dy = pos[u][0] - pos[v][0], pos[u][1] - pos[v][1]
-                    dist = math.sqrt(dx * dx + dy * dy) + 0.0001
+                    dist = math.hypot(dx, dy) + 1e-4
                     force = k * k / dist
                     disp[u][0] += dx / dist * force
                     disp[u][1] += dy / dist * force
+
             edges = []
             for u in nodes:
                 for v in adj[u]:
-                    if u < v: edges.append((u, v))
+                    if u < v:
+                        edges.append((u, v))
+
             for u, v in edges:
                 dx, dy = pos[u][0] - pos[v][0], pos[u][1] - pos[v][1]
-                dist = math.sqrt(dx * dx + dy * dy) + 0.0001
+                dist = math.hypot(dx, dy) + 1e-4
                 force = dist * dist / k
                 disp[u][0] -= dx / dist * force
                 disp[u][1] -= dy / dist * force
                 disp[v][0] += dx / dist * force
                 disp[v][1] += dy / dist * force
+
             for node in nodes:
                 dx, dy = disp[node]
-                dist = math.sqrt(dx * dx + dy * dy) + 0.0001
+                dist = math.hypot(dx, dy) + 1e-4
                 new_x = pos[node][0] + (dx / dist) * min(dist, temp)
                 new_y = pos[node][1] + (dy / dist) * min(dist, temp)
                 pos[node] = (max(20, min(width - 20, new_x)), max(20, min(height - 20, new_y)))
@@ -233,10 +307,11 @@ class App(tk.Tk):
     def draw_graph(self):
         self.canvas.delete("all")
         adj, nodes, weights = self._parse_graph_for_drawing()
-        if not nodes: return
+        if not nodes:
+            return
 
         width, height = self.canvas.winfo_width(), self.canvas.winfo_height()
-        if width < 50 or height < 50:  # Избегаем отрисовки на слишком маленьком холсте
+        if width < 50 or height < 50:
             self.after(50, self.draw_graph)
             return
 
@@ -244,23 +319,24 @@ class App(tk.Tk):
         node_radius, font_size = 18, 12
 
         # Рёбра
+        drawn_edges = set()
         for u, v_list in adj.items():
             for v in v_list:
-                if u < v:
-                    p1, p2 = self.node_positions.get(u), self.node_positions.get(v)
-                    if not (p1 and p2): continue
-                    self.canvas.create_line(p1, p2, fill="grey", width=2)
-                    w = weights.get(tuple(sorted((u, v))))
-                    if w:
-                        mx, my = (p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2
-
-                        ### ИСПРАВЛЕНО: КРИТИЧЕСКАЯ ОШИБКА ###
-                        # Рисуем подложку (прямоугольник), чтобы текст был читаемым
-                        # Это заменяет неработающий параметр insertbackground
-                        text_id = self.canvas.create_text(mx, my, text=w, font=(None, 10), fill="darkblue")
-                        bbox = self.canvas.bbox(text_id)
-                        rect_id = self.canvas.create_rectangle(bbox, fill="white", outline="white")
-                        self.canvas.tag_lower(rect_id, text_id)  # Помещаем прямоугольник под текст
+                key = tuple(sorted((u, v)))
+                if key in drawn_edges:
+                    continue
+                drawn_edges.add(key)
+                p1, p2 = self.node_positions.get(u), self.node_positions.get(v)
+                if not (p1 and p2):
+                    continue
+                self.canvas.create_line(p1, p2, fill="grey", width=2)
+                w = weights.get(key)
+                if w:
+                    mx, my = (p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2
+                    text_id = self.canvas.create_text(mx, my, text=w, font=(None, 10), fill="darkblue")
+                    bbox = self.canvas.bbox(text_id)
+                    rect_id = self.canvas.create_rectangle(bbox, fill="white", outline="white")
+                    self.canvas.tag_lower(rect_id, text_id)
 
         # Вершины
         for name, (x, y) in self.node_positions.items():
@@ -270,13 +346,16 @@ class App(tk.Tk):
 
     def solve_problem(self):
         is_weighted = self.is_weighted_var.get()
+
+        # Собираем матрицу из виджетов
         matrix_rows = []
         for r in range(self.dimension):
             if is_weighted:
-                row_str = ["0" if r == c else self.matrix_widgets[r][c].get() or "0" for c in range(self.dimension)]
+                row_str = ["0" if r == c else (self.matrix_widgets[r][c].get() or "0")
+                           for c in range(self.dimension)]
             else:
-                row_str = ["0" if r == c else "1" if self.matrix_widgets[r][c].get() else "0" for c in
-                           range(self.dimension)]
+                row_str = ["0" if r == c else ("1" if self.matrix_widgets[r][c].get() else "0")
+                           for c in range(self.dimension)]
             matrix_rows.append(" ".join(row_str))
 
         matrix_str = "\n".join(matrix_rows)
@@ -289,7 +368,10 @@ class App(tk.Tk):
 
         result = backend.solve(matrix_str, edges_str, targets_str, is_weighted)
 
-        if "ошибка" in result.lower():
+        # Считаем ошибкой любые явные сообщения об ошибке
+        low = result.lower()
+        is_error = any(substr in low for substr in ("ошибка", "не удалось", "не найден"))
+        if is_error:
             self.update_result(result, is_error=True)
         else:
             self.update_result(f"Ответ: {result}", is_error=False)
