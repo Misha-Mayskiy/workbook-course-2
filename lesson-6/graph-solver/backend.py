@@ -168,7 +168,13 @@ def _parse_edges_weighted(edges_str):
             w = int(w_str)
         except ValueError:
             raise ValueError(f"Неверный вес в строке: '{line}'")
-        adj_list[u][v], adj_list[v][u], nodes.add(u), nodes.add(v), weights.append(w)
+
+        adj_list[u][v] = w
+        adj_list[v][u] = w
+        nodes.add(u)
+        nodes.add(v)
+        weights.append(w)
+
     if not nodes: raise ValueError("Описание графа пусто.")
     return adj_list, sorted(list(nodes)), weights
 
@@ -212,6 +218,11 @@ def _parse_edges_unweighted(edges_str):
         parts = [p.strip() for p in re.split(r'[\s,-]+', line.strip().upper()) if p.strip()]
         if len(parts) != 2: raise ValueError(f"Неверный формат ребра: '{line}'")
         u, v = parts[0], parts[1]
-        adj_list[u].append(v), adj_list[v].append(u), nodes.add(u), nodes.add(v)
+
+        adj_list[u].append(v)
+        adj_list[v].append(u)
+        nodes.add(u)
+        nodes.add(v)
+
     if not nodes: raise ValueError("Описание графа пусто.")
     return adj_list, sorted(list(nodes))

@@ -273,9 +273,10 @@ class App(tk.Tk):
         matrix_rows = []
         for r in range(self.dimension):
             if is_weighted:
-                row_str = [self.matrix_widgets[r][c].get() or "0" for c in range(self.dimension)]
+                row_str = ["0" if r == c else self.matrix_widgets[r][c].get() or "0" for c in range(self.dimension)]
             else:
-                row_str = ["1" if self.matrix_widgets[r][c].get() else "0" for c in range(self.dimension)]
+                row_str = ["0" if r == c else "1" if self.matrix_widgets[r][c].get() else "0" for c in
+                           range(self.dimension)]
             matrix_rows.append(" ".join(row_str))
 
         matrix_str = "\n".join(matrix_rows)
