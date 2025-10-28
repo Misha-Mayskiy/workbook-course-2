@@ -6,7 +6,8 @@ import re
 from typing import List, Optional, Tuple, Dict
 from PyQt6 import QtWidgets, QtCore, QtGui
 
-from backend import GameRules, EGESolver
+from core.rules import GameRules
+from core.solver import EGESolver
 
 
 def compress_ranges(nums: List[int]) -> str:
@@ -79,7 +80,6 @@ class IntListEditor(QtWidgets.QWidget):
         line_layout = QtWidgets.QHBoxLayout()
         self.edit = QtWidgets.QLineEdit()
         self.edit.setPlaceholderText(placeholder)
-        # Разрешаем вводить и отрицательные, и положительные
         self.edit.setValidator(QtGui.QIntValidator(-1_000_000_000, 1_000_000_000, self))
         btn_add = QtWidgets.QPushButton("Добавить")
         btn_add.setAutoDefault(False)
@@ -174,7 +174,7 @@ class IntListEditor(QtWidgets.QWidget):
 class SolveWorker(QtCore.QObject):
     started = QtCore.pyqtSignal()
     progress = QtCore.pyqtSignal(int, int)  # i, total
-    finished = QtCore.pyqtSignal(list, list, list, float)
+    finished = QtCore.pyqtSignal(list, list, list, float, object)  # s19, s20, s21, dt, meta
     error = QtCore.pyqtSignal(str)
 
     def __init__(self, rules: GameRules, start_template, s_min: int, s_max: int, parent=None):
@@ -206,7 +206,24 @@ class SolveWorker(QtCore.QObject):
             dt = time.perf_counter() - t0
             if self._cancelled:
                 raise RuntimeError("Расчёт отменён пользователем")
-            self.finished.emit(s19, s20, s21, dt)
+
+            meta = dict(
+                rules=dict(
+                    target_mode=self.rules.target_mode,
+                    target=self.rules.target,
+                    finish_cmp=self.rules.finish_cmp,
+                    heap_index=self.rules.heap_index,
+                    adds=self.rules.adds,
+                    mults=self.rules.mults,
+                    divs=self.rules.divs,
+                    heaps=self.rules.heaps,
+                ),
+                start_template=self.start_template,
+                s_min=self.s_min,
+                s_max=self.s_max,
+                elapsed=dt,
+            )
+            self.finished.emit(s19, s20, s21, dt, meta)
         except Exception as e:
             self.error.emit(str(e))
 
@@ -333,6 +350,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         start_layout.addWidget(QtWidgets.QLabel("Диапазон S: от"), 1, 0)
         self.sp_smin = QtWidgets.QSpinBox()
+        # we keep as is
         self.sp_smin.setRange(0, 1_000_000_000)
         self.sp_smin.setValue(1)
         start_layout.addWidget(self.sp_smin, 1, 1)
@@ -495,7 +513,6 @@ class MainWindow(QtWidgets.QMainWindow):
         super().closeEvent(event)
 
     def _apply_styles(self):
-        # мягкие стили, чтобы не ломать темы
         self.setStyleSheet("""
             QGroupBox {
                 font-weight: 600;
@@ -549,7 +566,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.cb_finish_cmp.setCurrentIndex(1)  # <
             self.sp_target.setValue(27)
             self.cb_heap_index.setCurrentIndex(0)
-            self.ed_adds.set_values([-4, -3])  # порядок не важен, список сортируется
+            self.ed_adds.set_values([-4, -3])
             self.ed_mults.set_values([])
             self.ed_divs.set_values([3])
             self.sp_smin.setValue(27)
@@ -620,7 +637,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _set_busy(self, busy: bool, text: str = ""):
         self.progress.setVisible(busy)
-        self.btn_calc.setEnabled(busy) if False else self.btn_calc.setEnabled(not busy)
+        self.btn_calc.setEnabled(not busy)  # фикс
         self.btn_cancel.setEnabled(busy)
         if busy:
             self.progress.setRange(0, 0)
@@ -636,31 +653,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.progress.setValue(i)
         self.progress.setFormat(f"Идёт расчёт... {i}/{total} ({(i / total * 100):.0f}%)")
 
-    def _on_finished(self, s19: List[int], s20: List[int], s21: List[int], dt: float):
+    def _on_finished(self, s19: List[int], s20: List[int], s21: List[int], dt: float, meta: dict):
         self._set_busy(False)
-        rules = self._collect_rules()
-        start_template = self._collect_start_template()
-        s_min = min(self.sp_smin.value(), self.sp_smax.value())
-        s_max = max(self.sp_smin.value(), self.sp_smax.value())
         self._last_results = {19: s19, 20: s20, 21: s21}
-        self._last_meta = dict(
-            rules=dict(
-                target_mode=rules.target_mode,
-                target=rules.target,
-                finish_cmp=rules.finish_cmp,
-                heap_index=rules.heap_index,
-                adds=rules.adds,
-                mults=rules.mults,
-                divs=rules.divs,
-                heaps=rules.heaps,
-            ),
-            start_template=start_template,
-            s_min=s_min,
-            s_max=s_max,
-            elapsed=dt,
-        )
+        self._last_meta = meta
 
-        # Итоги: показываем и min, и max (удобно для разных формулировок)
+        # Итоги: показываем и min, и max
         def mm(vals: List[int]) -> Tuple[Optional[int], Optional[int], int]:
             return (min(vals) if vals else None, max(vals) if vals else None, len(vals))
 
@@ -856,7 +854,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 "QToolTip { color: #000; background-color: #ffffe1; "
                 "border: 1px solid #c5c5c5; }"
             )
-        # Без QToolTip.setStyleSheet — стилизуем тултипы через stylesheet приложения
         base_css = app.styleSheet() or ""
         base_css = re.sub(r"QToolTip\s*\{[^}]*\}", "", base_css)
         app.setStyleSheet(base_css + "\n" + tooltip_css)
@@ -900,15 +897,3 @@ class MainWindow(QtWidgets.QMainWindow):
         s.setValue("smin", self.sp_smin.value())
         s.setValue("smax", self.sp_smax.value())
         s.setValue("theme", self.cb_theme.currentText())
-
-
-def main():
-    app = QtWidgets.QApplication(sys.argv)
-    QtWidgets.QApplication.setStyle("Fusion")
-    w = MainWindow()
-    w.show()
-    sys.exit(app.exec())
-
-
-if __name__ == "__main__":
-    main()

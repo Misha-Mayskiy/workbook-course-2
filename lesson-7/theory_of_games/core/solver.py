@@ -1,106 +1,7 @@
-from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import List, Tuple, Optional, Iterable, Dict, Callable
+from typing import List, Tuple, Optional, Dict, Callable
 
-
-@dataclass
-class GameRules:
-    """
-    Правила игры.
-    - target_mode: 'sum' | 'max' | 'heap'
-    - target: порог
-    - finish_cmp: 'ge' (>= target) или 'lt' (< target)
-    - heap_index: индекс кучи для режима 'heap'
-    - adds: целочисленные сдвиги (могут быть отрицательными), 0 исключается
-    - mults: множители (целые >= 2)
-    - divs: делители (целые >= 2), результат — целочисленное деление (округление вниз)
-    - heaps: количество куч (1 или 2)
-    """
-    target_mode: str = "sum"
-    target: int = 100
-    finish_cmp: str = "ge"  # 'ge' или 'lt'
-    heap_index: Optional[int] = None
-
-    adds: List[int] = field(default_factory=lambda: [1])
-    mults: List[int] = field(default_factory=lambda: [3])
-    divs: List[int] = field(default_factory=list)
-
-    heaps: int = 2
-
-    def __post_init__(self):
-        if self.heaps not in (1, 2):
-            raise ValueError("heaps должен быть 1 или 2")
-
-        if self.finish_cmp not in ("ge", "lt"):
-            raise ValueError("finish_cmp должен быть 'ge' или 'lt'")
-
-        # Нормализация списков действий
-        self.adds = sorted({a for a in self.adds if a != 0})
-        self.mults = sorted({m for m in self.mults if m >= 2})
-        self.divs = sorted({d for d in self.divs if d >= 2})
-
-        if self.target <= 0:
-            # допускаем положительный порог (так же работает в 'lt' режиме)
-            raise ValueError("target должен быть положительным")
-
-        if self.target_mode == "heap":
-            if self.heap_index is None:
-                raise ValueError("heap_index must be set for target_mode='heap'")
-            if not (0 <= self.heap_index < self.heaps):
-                raise ValueError("heap_index вне диапазона куч")
-
-
-def is_terminal(state: Tuple[int, ...], rules: GameRules) -> bool:
-    if rules.target_mode == "sum":
-        val = sum(state)
-    elif rules.target_mode == "max":
-        val = max(state)
-    elif rules.target_mode == "heap":
-        idx = rules.heap_index or 0
-        val = state[idx]
-    else:
-        raise ValueError(f"Unknown target_mode: {rules.target_mode}")
-
-    if rules.finish_cmp == "ge":
-        return val >= rules.target
-    else:  # "lt"
-        return val < rules.target
-
-
-def iter_moves(state: Tuple[int, ...], rules: GameRules) -> Iterable[Tuple[int, ...]]:
-    """Итерирует все позиции, достижимые за 1 ход (меняется ровно одна куча)."""
-    n = len(state)
-    seen = set()
-    for i in range(n):
-        val = state[i]
-        # Сдвиги (прибавления/вычитания)
-        for a in rules.adds:
-            new_state = list(state)
-            new_state[i] = val + a
-            t = tuple(new_state)
-            if t not in seen:
-                seen.add(t)
-                yield t
-        # Умножения
-        for m in rules.mults:
-            new_state = list(state)
-            new_state[i] = val * m
-            t = tuple(new_state)
-            if t not in seen:
-                seen.add(t)
-                yield t
-        # Деления (округление вниз)
-        for d in rules.divs:
-            new_state = list(state)
-            new_state[i] = val // d
-            t = tuple(new_state)
-            if t not in seen:
-                seen.add(t)
-                yield t
-
-
-def gen_moves(state: Tuple[int, ...], rules: GameRules) -> List[Tuple[int, ...]]:
-    return list(iter_moves(state, rules))
+from .game import Game
+from .rules import GameRules
 
 
 class EGESolver:
@@ -125,7 +26,8 @@ class EGESolver:
 
         self.var_idx = next(i for i, x in enumerate(start_template) if x is None)
 
-        # Кэши
+        # Game + кэши
+        self.game = Game(self.rules)
         self._moves_cache: Dict[Tuple[int, ...], Tuple[Tuple[int, ...], ...]] = {}
         self._w1_cache: Dict[Tuple[int, ...], bool] = {}
         self._can_cache: Dict[Tuple[Tuple[int, ...], int], bool] = {}
@@ -139,7 +41,7 @@ class EGESolver:
         res = self._moves_cache.get(state)
         if res is not None:
             return res
-        res = tuple(iter_moves(state, self.rules))
+        res = tuple(self.game.iter_moves(state))
         self._moves_cache[state] = res
         return res
 
@@ -148,7 +50,7 @@ class EGESolver:
         if cached is not None:
             return cached
         for nxt in self._moves(state):
-            if is_terminal(nxt, self.rules):
+            if self.game.is_terminal(nxt):
                 self._w1_cache[state] = True
                 return True
         self._w1_cache[state] = False
@@ -167,7 +69,7 @@ class EGESolver:
         if key in self._can_cache:
             return self._can_cache[key]
 
-        if is_terminal(state, self.rules):
+        if self.game.is_terminal(state):
             self._can_cache[key] = False
             return False
         if k == 0:
@@ -175,7 +77,7 @@ class EGESolver:
             return False
 
         for s1 in self._moves(state):
-            if is_terminal(s1, self.rules):
+            if self.game.is_terminal(s1):
                 self._can_cache[key] = True
                 return True
             opp_moves = self._moves(s1)
@@ -194,37 +96,11 @@ class EGESolver:
         return "(" + ", ".join(map(str, st)) + ")"
 
     def describe_move(self, a: Tuple[int, ...], b: Tuple[int, ...]) -> str:
-        if len(a) != len(b):
-            return f"{self.fmt_state(a)} → {self.fmt_state(b)}"
-        idx = [i for i in range(len(a)) if a[i] != b[i]]
-        if len(idx) != 1:
-            return f"{self.fmt_state(a)} → {self.fmt_state(b)}"
-        i = idx[0]
-        old, new = a[i], b[i]
-        op = None
-        # Пробуем умножение
-        if old != 0 and new % old == 0:
-            m = new // old
-            if m in self.rules.mults:
-                op = f"×{m}"
-        # Пробуем деление (округление вниз)
-        if op is None and self.rules.divs:
-            for d in self.rules.divs:
-                if old // d == new:
-                    op = f"÷{d}"
-                    break
-        # Пробуем сдвиг
-        if op is None:
-            d = new - old
-            if d in self.rules.adds:
-                op = f"{'+' if d >= 0 else '−'}{abs(d)}"
-        if op is None:
-            op = f"{old}→{new}"
-        return f"на {i + 1}-й куче: {op}"
+        return self.game.describe_move(a, b)
 
     def _find_w1_move(self, state: Tuple[int, ...]) -> Optional[Tuple[int, ...]]:
         for nxt in self._moves(state):
-            if is_terminal(nxt, self.rules):
+            if self.game.is_terminal(nxt):
                 return nxt
         return None
 
@@ -239,7 +115,7 @@ class EGESolver:
         for s1 in self._moves(state):
             opp_moves = self._moves(s1)
             if not opp_moves:
-                if is_terminal(s1, self.rules):
+                if self.game.is_terminal(s1):
                     continue
                 return s1, [], 0
             ok_for_all = True
@@ -260,7 +136,7 @@ class EGESolver:
         if self._has_move_to_terminal(start):
             return None
         # Проверяем 19-жёсткое: для всех ходов Пети Ваня выигрывает за 1
-        petya_moves = [pm for pm in self._moves(start) if not is_terminal(pm, self.rules)]
+        petya_moves = [pm for pm in self._moves(start) if not self.game.is_terminal(pm)]
         if not petya_moves:
             return None
         if not all(self._find_w1_move(pm) for pm in petya_moves):
@@ -272,6 +148,7 @@ class EGESolver:
             if shown >= limit_examples:
                 break
             v1 = self._find_w1_move(pm)
+            assert v1 is not None
             lines.append(f"  Петя: {self.describe_move(start, pm)} → {self.fmt_state(pm)}")
             lines.append(f"  Ваня: {self.describe_move(pm, v1)} → {self.fmt_state(v1)} (терминал)")
             shown += 1
@@ -286,16 +163,15 @@ class EGESolver:
         if not self._can_win_in(start, 2):
             return None
         for p1 in self._moves(start):
-            if is_terminal(p1, self.rules):
+            if self.game.is_terminal(p1):
                 continue
             w2 = self._find_w2_witness(p1, limit_replies=limit_examples)
             if not w2:
                 continue
             first, examples, total = w2
-            lines = []
-            lines.append(f"Старт: {self.fmt_state(start)}")
-            lines.append(f"Петя (1-й ход): {self.describe_move(start, p1)} → {self.fmt_state(p1)}")
-            lines.append("Далее при любом ходе Вани у Пети есть победный 2-й ход. Примеры:")
+            lines = [f"Старт: {self.fmt_state(start)}",
+                     f"Петя (1-й ход): {self.describe_move(start, p1)} → {self.fmt_state(p1)}",
+                     "Далее при любом ходе Вани у Пети есть победный 2-й ход. Примеры:"]
             shown = 0
             for v1, p2 in examples:
                 lines.append(f"  Ваня: {self.describe_move(p1, v1)} → {self.fmt_state(v1)}")
@@ -310,7 +186,7 @@ class EGESolver:
     def sample_strategy_21(self, S: int, limit_examples: int = 6) -> Optional[str]:
         start = self._start_from_S(S)
         for pm in self._moves(start):
-            if is_terminal(pm, self.rules):
+            if self.game.is_terminal(pm):
                 continue
             if self._has_move_to_terminal(pm):
                 continue  # нам нужен пример, где Ваня не выигрывает сразу
@@ -320,13 +196,11 @@ class EGESolver:
             if not w2:
                 continue
             v1, examples, total = w2
-            lines = []
-            lines.append(f"Старт: {self.fmt_state(start)}")
-            lines.append(
-                "Покажем ход Пети, после которого Ваня НЕ выигрывает сразу, но выигрывает вторым ходом при любой игре Пети.")
-            lines.append(f"Петя: {self.describe_move(start, pm)} → {self.fmt_state(pm)}")
-            lines.append(f"Ваня (1-й ход): {self.describe_move(pm, v1)} → {self.fmt_state(v1)} (подготовка)")
-            lines.append("Далее при любом ответе Пети Ваня добивает за 2-й ход. Примеры:")
+            lines = [f"Старт: {self.fmt_state(start)}",
+                     "Покажем ход Пети, после которого Ваня НЕ выигрывает сразу, но выигрывает вторым ходом при любой игре Пети.",
+                     f"Петя: {self.describe_move(start, pm)} → {self.fmt_state(pm)}",
+                     f"Ваня (1-й ход): {self.describe_move(pm, v1)} → {self.fmt_state(v1)} (подготовка)",
+                     "Далее при любом ответе Пети Ваня добивает за 2-й ход. Примеры:"]
             shown = 0
             for p2, v2 in examples:
                 lines.append(f"  Петя: {self.describe_move(v1, p2)} → {self.fmt_state(p2)}")
@@ -359,7 +233,7 @@ class EGESolver:
 
             # 19: Петя не выигрывает за 1; для любого хода Пети Ваня выигрывает за 1
             w1_petya = self._has_move_to_terminal(start)
-            petya_moves = [pm for pm in self._moves(start) if not is_terminal(pm, self.rules)]
+            petya_moves = [pm for pm in self._moves(start) if not self.game.is_terminal(pm)]
             all_vanya_w1 = bool(petya_moves) and all(self._has_move_to_terminal(pm) for pm in petya_moves)
             if (not w1_petya) and all_vanya_w1:
                 s_list_19.append(S)
@@ -371,7 +245,7 @@ class EGESolver:
 
             # 21: у Вани W2 при любой игре Пети; и нет гарантии W1
             petya_moves_all = self._moves(start)
-            if any(is_terminal(pm, self.rules) for pm in petya_moves_all):
+            if any(self.game.is_terminal(pm) for pm in petya_moves_all):
                 ok_21 = False
             else:
                 all_vanya_w2 = all(self._can_win_in(pm, 2) for pm in petya_moves_all)
