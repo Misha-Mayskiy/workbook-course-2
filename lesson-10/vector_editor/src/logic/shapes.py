@@ -36,6 +36,10 @@ class Shape(QGraphicsPathItem):
             "props": {"color": self.color_name}
         }
 
+    def set_stroke_width(self, width: int):
+        self.width = width
+        self._setup_style()
+
 
 # --- КЛАСС ГРУППЫ (Composite) ---
 
@@ -68,6 +72,11 @@ class Group(QGraphicsItemGroup, Shape):
 
     def set_geometry(self, start, end):
         pass
+
+    def set_stroke_width(self, width: int):
+        for child in self.childItems():
+            if isinstance(child, Shape):
+                child.set_stroke_width(width)
 
 
 # --- КОНКРЕТНЫЕ ФИГУРЫ ---
