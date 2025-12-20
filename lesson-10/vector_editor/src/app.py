@@ -14,8 +14,8 @@ class VectorEditorWindow(QMainWindow):
         # Состояние приложения (из 1-3)
         self.current_tool = "line"
 
-        self._init_ui()
         self._setup_layout()
+        self._init_ui()
 
     def _init_ui(self):
         # 1. Меню и Actions (из 1-2)
@@ -30,6 +30,18 @@ class VectorEditorWindow(QMainWindow):
         # 2. Тулбар (из 1-2)
         toolbar = self.addToolBar("Main Toolbar")
         toolbar.addAction(exit_action)
+
+        # В MainWindow._init_ui
+        stack = self.canvas.undo_stack
+        edit_menu = self.menuBar().addMenu("&Edit")
+        edit_menu.addAction(stack.createUndoAction(self, "Undo"))
+        edit_menu.addAction(stack.createRedoAction(self, "Redo"))
+
+        # Кнопка Delete
+        delete_action = QAction("Delete", self)
+        delete_action.setShortcut("Delete")
+        delete_action.triggered.connect(self.canvas.delete_selected)
+        self.addAction(delete_action)
 
         # 3. Строка состояния (из 1-1)
         self.statusBar().showMessage("Готов к работе")

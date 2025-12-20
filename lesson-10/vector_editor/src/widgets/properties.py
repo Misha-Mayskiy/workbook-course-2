@@ -97,7 +97,10 @@ class PropertiesPanel(QWidget):
         color = QColorDialog.getColor()
         if color.isValid():
             hex_c = color.name()
-            for item in self.scene.selectedItems():
-                if hasattr(item, 'set_active_color'):
-                    item.set_active_color(hex_c)
-            self.on_selection_changed()  # Обновить вид кнопки
+            items = self.scene.selectedItems()
+            if items:
+                self.undo_stack.beginMacro("Смена цвета")
+                for item in items:
+                    self.undo_stack.push(ChangeColorCommand(item, hex_c))
+                self.undo_stack.endMacro()
+            self.on_selection_changed()
