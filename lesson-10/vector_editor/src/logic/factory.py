@@ -1,52 +1,90 @@
-from src.logic.shapes import Rectangle, Line, Ellipse
+from __future__ import annotations
+
+from PySide6.QtCore import QPointF
+from src.logic.shapes import Shape, Rectangle, Line, Ellipse, Group
 
 
 class ShapeFactory:
+    """
+    Фабрика для создания и восстановления фигур.
+    Централизованно управляет логикой рождения объектов.
+    """
+
     @staticmethod
-    def create_shape(shape_type: str, start_point, end_point, color: str):
-        x1, y1 = start_point.x(), start_point.y()
-        x2, y2 = end_point.x(), end_point.y()
+    def create_shape(stype: str, start: QPointF, end: QPointF, color: str) -> Shape:
+        """
+        Создает новую фигуру на основе жеста мыши (для CreationTool).
+        Здесь происходит нормализация (min/max/abs).
+        """
+        # Считаем базовые параметры для прямоугольных фигур
+        x = min(start.x(), end.x())
+        y = min(start.y(), end.y())
+        w = abs(end.x() - start.x())
+        h = abs(end.y() - start.y())
 
-        if shape_type == 'line':
-            return Line(x1, y1, x2, y2, color)
-
-        # Нормализация для прямоугольных штук
-        x = min(x1, x2)
-        y = min(y1, y2)
-        w = abs(x2 - x1)
-        h = abs(y2 - y1)
-
-        if shape_type == 'rect':
+        if stype == "rect":
             return Rectangle(x, y, w, h, color)
-        elif shape_type == 'ellipse':
+
+        elif stype == "ellipse":
             return Ellipse(x, y, w, h, color)
 
-        raise ValueError(f"Unknown tool: {shape_type}")
+        elif stype == "line":
+            # Для линии нормализация не нужна, важны точки начала и конца
+            return Line(start.x(), start.y(), end.x(), end.y(), color)
+
+        raise ValueError(f"Неизвестный тип фигуры: {stype}")
 
     @staticmethod
-    def from_dict(data):
+    def from_dict(data: dict) -> Shape:
+        """
+        Восстанавливает фигуру или группу из словаря (для загрузки из JSON).
+        РЕКУРСИВНЫЙ МЕТОД.
+        """
         stype = data.get("type")
-        if stype == "group":
-            group = Group()
-            # Важно: сначала ставим позицию группы
-            group.setPos(data["pos"][0], data["pos"][1])
-            for child_data in data.get("children", []):
-                child = ShapeFactory.from_dict(child_data)  # РЕКУРСИЯ
-                group.addToGroup(child)
-            return group
 
-        # Для обычных фигур (rect, line, ellipse)
+        if stype == "group":
+            return ShapeFactory._create_group_from_dict(data)
+        else:
+            return ShapeFactory._create_primitive_from_dict(data)
+
+    @staticmethod
+    def _create_primitive_from_dict(data: dict) -> Shape:
+        """Вспомогательный метод для простых фигур"""
+        stype = data.get("type")
         props = data.get("props", {})
         color = props.get("color", "black")
 
         if stype == "rect":
-            obj = Rectangle(props['x'], props['y'], props['w'], props['h'], color)
-        elif stype == "line":
-            obj = Line(props['x1'], props['y1'], props['x2'], props['y2'], color)
+            obj = Rectangle(props.get('x', 0), props.get('y', 0),
+                            props.get('w', 0), props.get('h', 0), color)
         elif stype == "ellipse":
-            obj = Ellipse(props['x'], props['y'], props['w'], props['h'], color)
+            obj = Ellipse(props.get('x', 0), props.get('y', 0),
+                          props.get('w', 0), props.get('h', 0), color)
+        elif stype == "line":
+            obj = Line(props.get('x1', 0), props.get('y1', 0),
+                       props.get('x2', 0), props.get('y2', 0), color)
+        else:
+            raise ValueError(f"Невозможно восстановить фигуру типа: {stype}")
 
-        # Восстанавливаем позицию (смещение)
+        # Важнейший момент Модуля 7: восстанавливаем смещение (pos)
         if "pos" in data:
             obj.setPos(data["pos"][0], data["pos"][1])
+
         return obj
+
+    @staticmethod
+    def _create_group_from_dict(data: dict) -> Group:
+        """Вспомогательный метод для рекурсивного восстановления группы"""
+        group = Group()
+
+        # 1. Сначала ставим позицию самой группы
+        if "pos" in data:
+            group.setPos(data["pos"][0], data["pos"][1])
+
+        # 2. Восстанавливаем детей (РЕКУРСИЯ)
+        for child_data in data.get("children", []):
+            child_obj = ShapeFactory.from_dict(child_data)
+            # addToGroup сам позаботится о координатах ребенка
+            group.addToGroup(child_obj)
+
+        return group

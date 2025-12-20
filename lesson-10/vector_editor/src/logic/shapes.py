@@ -84,22 +84,28 @@ class Group(QGraphicsItemGroup, Shape):
 class Rectangle(Shape):
     def __init__(self, x, y, w, h, color="black"):
         super().__init__(color)
-        self.set_geometry(QPointF(x, y), QPointF(x + w, y + h))
+        # Добавляем подчеркивание, чтобы не конфликтовать с Qt
+        self._x, self._y, self._w, self._h = x, y, w, h
+        self._create_geometry()
+
+    def set_geometry(self, start_point, end_point):
+        self._x = min(start_point.x(), end_point.x())
+        self._y = min(start_point.y(), end_point.y())
+        self._w = abs(end_point.x() - start_point.x())
+        self._h = abs(end_point.y() - start_point.y())
+        self._create_geometry()
+
+    def _create_geometry(self):
+        path = QPainterPath()
+        path.addRect(self._x, self._y, self._w, self._h)
+        self.setPath(path)
 
     @property
     def type_name(self): return "rect"
 
-    def set_geometry(self, start, end):
-        x, y = min(start.x(), end.x()), min(start.y(), end.y())
-        w, h = abs(end.x() - start.x()), abs(end.y() - start.y())
-        path = QPainterPath()
-        path.addRect(x, y, w, h)
-        self.setPath(path)
-
     def to_dict(self):
         d = super().to_dict()
-        r = self.path().boundingRect()  # Достаем размеры из пути
-        d["props"].update({"x": r.x(), "y": r.y(), "w": r.width(), "h": r.height()})
+        d["props"].update({"x": self._x, "y": self._y, "w": self._w, "h": self._h})
         return d
 
 
