@@ -1,6 +1,11 @@
+import json
+
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout,
-                               QHBoxLayout, QPushButton, QFrame)
+                               QHBoxLayout, QPushButton, QFrame,
+                               QFileDialog, QMessageBox)
+from src.logic.factory import ShapeFactory
+from src.logic.strategies import JsonSaveStrategy, ImageSaveStrategy
 from src.widgets.canvas import EditorCanvas
 from src.widgets.properties import PropertiesPanel
 
@@ -21,6 +26,20 @@ class VectorEditorWindow(QMainWindow):
         # 1. Меню и Actions (из 1-2)
         menubar = self.menuBar()
         file_menu = menubar.addMenu("&File")
+
+        # 2. Кнопка ОТКРЫТЬ
+        open_action = QAction("Open Project", self)
+        open_action.setShortcut("Ctrl+O")
+        # Связываем кнопку с нашим методом из Модуля 7
+        open_action.triggered.connect(self.on_open_clicked)
+        file_menu.addAction(open_action)
+
+        # 3. Кнопка СОХРАНИТЬ
+        save_action = QAction("Save As...", self)
+        save_action.setShortcut("Ctrl+S")
+        # Связываем кнопку с нашим методом из Модуля 7
+        save_action.triggered.connect(self.on_save_clicked)
+        file_menu.addAction(save_action)
 
         exit_action = QAction("Exit", self)
         exit_action.setShortcut("Ctrl+Q")
@@ -101,3 +120,39 @@ class VectorEditorWindow(QMainWindow):
         # Сообщаем холсту, какой инструмент теперь главный
         self.canvas.set_tool(tool_name)
         self.statusBar().showMessage(f"Активный инструмент: {tool_name}")
+
+    def on_save_clicked(self):
+        filters = "Vector Project (*.json);;PNG Image (*.png)"
+        path, selected_filter = QFileDialog.getSaveFileName(self, "Сохранить", "", filters)
+
+        if not path: return
+
+        # Паттерн Стратегия в действии
+        strategy = ImageSaveStrategy() if path.endswith(".png") else JsonSaveStrategy()
+
+        try:
+            strategy.save(path, self.canvas.scene)
+            self.statusBar().showMessage(f"Успешно сохранено: {path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить: {e}")
+
+    def on_open_clicked(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Открыть", "", "Vector Project (*.json)")
+        if not path: return
+
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            # СБРОС (Reset)
+            self.canvas.scene.clear()
+            self.canvas.undo_stack.clear()
+
+            # ЗАГРУЗКА
+            for shape_data in data.get("shapes", []):
+                shape = ShapeFactory.from_dict(shape_data)
+                self.canvas.scene.addItem(shape)
+
+            self.statusBar().showMessage(f"Проект загружен: {path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка загрузки", str(e))

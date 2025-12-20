@@ -24,19 +24,18 @@ class ShapeFactory:
         raise ValueError(f"Unknown tool: {shape_type}")
 
     @staticmethod
-    def from_dict(data: dict):
-        """Рекурсивное восстановление из JSON/Словаря"""
+    def from_dict(data):
         stype = data.get("type")
-
         if stype == "group":
             group = Group()
+            # Важно: сначала ставим позицию группы
             group.setPos(data["pos"][0], data["pos"][1])
             for child_data in data.get("children", []):
                 child = ShapeFactory.from_dict(child_data)  # РЕКУРСИЯ
                 group.addToGroup(child)
             return group
 
-        # Для примитивов
+        # Для обычных фигур (rect, line, ellipse)
         props = data.get("props", {})
         color = props.get("color", "black")
 
@@ -44,7 +43,10 @@ class ShapeFactory:
             obj = Rectangle(props['x'], props['y'], props['w'], props['h'], color)
         elif stype == "line":
             obj = Line(props['x1'], props['y1'], props['x2'], props['y2'], color)
+        elif stype == "ellipse":
+            obj = Ellipse(props['x'], props['y'], props['w'], props['h'], color)
 
+        # Восстанавливаем позицию (смещение)
         if "pos" in data:
             obj.setPos(data["pos"][0], data["pos"][1])
         return obj
